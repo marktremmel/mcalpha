@@ -1,1 +1,535 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minecraft Alpha Web</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #87CEEB; /* Sky blue */
+            font-family: 'Courier New', Courier, monospace;
+            user-select: none;
+        }
+        #blocker {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 10;
+        }
+        #instructions {
+            text-align: center;
+            background: rgba(0,0,0,0.8);
+            padding: 40px;
+            border-radius: 10px;
+            border: 4px solid #555;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            cursor: pointer;
+        }
+        h1 {
+            color: #44aa44;
+            text-shadow: 2px 2px 0 #000;
+            font-size: 40px;
+            margin-top: 0;
+        }
+        .key {
+            display: inline-block;
+            background: #eee;
+            color: #333;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            border-bottom: 3px solid #ccc;
+        }
+        /* Crosshair */
+        #crosshair {
+            position: absolute;
+            top: 50%; left: 50%;
+            width: 20px; height: 20px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            z-index: 5;
+        }
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 2px #000;
+        }
+        #crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; }
+        #crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; }
+        
+        /* Hotbar */
+        #hotbar {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 5px;
+            background: rgba(0,0,0,0.5);
+            padding: 5px;
+            border: 2px solid #333;
+            border-radius: 5px;
+            z-index: 5;
+        }
+        .slot {
+            width: 40px; height: 40px;
+            border: 2px solid #555;
+            background-color: rgba(255,255,255,0.1);
+            position: relative;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            text-shadow: 1px 1px 0 #000;
+        }
+        .slot.active {
+            border-color: white;
+            box-shadow: 0 0 10px white;
+            transform: scale(1.1);
+        }
+        .slot-num {
+            position: absolute;
+            top: 2px; left: 4px;
+            font-size: 10px;
+        }
+        
+        /* Block Previews in CSS */
+        .preview-1 { background: #654321; } /* Dirt */
+        .preview-2 { background: linear-gradient(135deg, #44aa44 50%, #654321 50%); } /* Grass */
+        .preview-3 { background: #888888; } /* Stone */
+        .preview-4 { background: #4a3018; border-radius: 4px; } /* Wood */
+        .preview-5 { background: #2d5c22; opacity: 0.8; } /* Leaves */
+        .preview-6 { background: #aaddff; opacity: 0.6; border: 1px solid #fff; } /* Glass */
+        .block-icon { width: 24px; height: 24px; box-shadow: inset -2px -2px 0 rgba(0,0,0,0.3), inset 2px 2px 0 rgba(255,255,255,0.3); }
+    </style>
+</head>
+<body>
+
+<div id="crosshair"></div>
+
+<div id="hotbar">
+    <div class="slot" id="slot-1"><span class="slot-num">1</span><div class="block-icon preview-1"></div></div>
+    <div class="slot active" id="slot-2"><span class="slot-num">2</span><div class="block-icon preview-2"></div></div>
+    <div class="slot" id="slot-3"><span class="slot-num">3</span><div class="block-icon preview-3"></div></div>
+    <div class="slot" id="slot-4"><span class="slot-num">4</span><div class="block-icon preview-4"></div></div>
+    <div class="slot" id="slot-5"><span class="slot-num">5</span><div class="block-icon preview-5"></div></div>
+    <div class="slot" id="slot-6"><span class="slot-num">6</span><div class="block-icon preview-6"></div></div>
+</div>
+
+<div id="blocker">
+    <div id="instructions">
+        <h1>MINECRAFT ALPHA</h1>
+        <p>Click anywhere to Play</p>
+        <div style="text-align: left; margin-top: 20px; line-height: 1.8;">
+            <span class="key">W</span> <span class="key">A</span> <span class="key">S</span> <span class="key">D</span> = Move around<br>
+            <span class="key">SPACE</span> = Jump<br>
+            <span class="key">Left Click</span> = Break Block<br>
+            <span class="key">Right Click</span> = Place Block<br>
+            <span class="key">1</span> - <span class="key">6</span> = Select Block Type
+        </div>
+    </div>
+</div>
+
+<!-- Three.js Libraries -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
+
+<script>
+    // --- Engine Setup ---
+    let camera, scene, renderer, controls;
+    
+    // Physics & Movement
+    let moveForward = false;
+    let moveBackward = false;
+    let moveLeft = false;
+    let moveRight = false;
+    let canJump = false;
+    let velocity = new THREE.Vector3();
+    let direction = new THREE.Vector3();
+    let prevTime = performance.now();
+
+    // World Data
+    const blocksMap = new Map(); // Stores string "x,y,z" to Mesh
+    const objects = []; // Array of meshes for raycasting
+    
+    // Interaction
+    let currentBlockType = 2; // Default to Grass
+    let rollOverMesh; // Outline block
+    const raycaster = new THREE.Raycaster();
+
+    // --- Block Materials ---
+    // Emulating Minecraft Alpha colors without textures for perfect self-containment
+    const mDirt = new THREE.MeshLambertMaterial({ color: 0x654321 });
+    const mGrassTop = new THREE.MeshLambertMaterial({ color: 0x44aa44 });
+    const mGrassSide = new THREE.MeshLambertMaterial({ color: 0x654321 });
+    const mStone = new THREE.MeshLambertMaterial({ color: 0x888888 });
+    const mWood = new THREE.MeshLambertMaterial({ color: 0x4a3018 });
+    const mLeaves = new THREE.MeshLambertMaterial({ color: 0x2d5c22 });
+    const mGlass = new THREE.MeshLambertMaterial({ color: 0xaaddff, transparent: true, opacity: 0.5 });
+    const mBedrock = new THREE.MeshLambertMaterial({ color: 0x222222 });
+
+    // Grass block has green top, dirt sides and bottom
+    const grassMat = [mGrassSide, mGrassSide, mGrassTop, mDirt, mGrassSide, mGrassSide];
+
+    const blockMaterials = {
+        1: mDirt,
+        2: grassMat,
+        3: mStone,
+        4: mWood,
+        5: mLeaves,
+        6: mGlass,
+        99: mBedrock
+    };
+
+    const blockGeometry = new THREE.BoxGeometry(1, 1, 1);
+
+    init();
+    animate();
+
+    function init() {
+        // Scene setup
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); // Alpha sky
+        scene.fog = new THREE.Fog(0x87CEEB, 20, 60); // Distance fog
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        dirLight.position.set(20, 50, 20);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // Camera setup
+        camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.set(0, 5, 0); // Spawn point
+
+        // Renderer setup
+        renderer = new THREE.WebGLRenderer({ antialias: false }); // Pixelated feel
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Controls
+        controls = new THREE.PointerLockControls(camera, document.body);
+
+        const blocker = document.getElementById('blocker');
+        const instructions = document.getElementById('instructions');
+
+        instructions.addEventListener('click', function () {
+            controls.lock();
+        });
+
+        controls.addEventListener('lock', function () {
+            instructions.style.display = 'none';
+            blocker.style.display = 'none';
+        });
+
+        controls.addEventListener('unlock', function () {
+            blocker.style.display = 'flex';
+            instructions.style.display = 'block';
+        });
+
+        scene.add(controls.getObject());
+
+        // Keyboard events
+        const onKeyDown = function (event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW': moveForward = true; break;
+                case 'ArrowLeft':
+                case 'KeyA': moveLeft = true; break;
+                case 'ArrowDown':
+                case 'KeyS': moveBackward = true; break;
+                case 'ArrowRight':
+                case 'KeyD': moveRight = true; break;
+                case 'Space': if (canJump === true) velocity.y += 10; canJump = false; break;
+                // Block Selection
+                case 'Digit1': selectBlock(1); break;
+                case 'Digit2': selectBlock(2); break;
+                case 'Digit3': selectBlock(3); break;
+                case 'Digit4': selectBlock(4); break;
+                case 'Digit5': selectBlock(5); break;
+                case 'Digit6': selectBlock(6); break;
+            }
+        };
+
+        const onKeyUp = function (event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW': moveForward = false; break;
+                case 'ArrowLeft':
+                case 'KeyA': moveLeft = false; break;
+                case 'ArrowDown':
+                case 'KeyS': moveBackward = false; break;
+                case 'ArrowRight':
+                case 'KeyD': moveRight = false; break;
+            }
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
+
+        // Mouse Interactions (Breaking/Placing)
+        document.addEventListener('mousedown', onDocumentMouseDown);
+
+        // Resize handler
+        window.addEventListener('resize', onWindowResize);
+
+        // Setup Outline Preview Block
+        const rollOverGeo = new THREE.EdgesGeometry(new THREE.BoxGeometry(1.002, 1.002, 1.002));
+        const rollOverMat = new THREE.LineBasicMaterial({ color: 0x000000, linewidth: 2 });
+        rollOverMesh = new THREE.LineSegments(rollOverGeo, rollOverMat);
+        scene.add(rollOverMesh);
+
+        // Generate the World
+        generateTerrain();
+    }
+
+    // --- Block Placement / Mining Logic ---
+
+    function getBlockKey(x, y, z) {
+        return `${Math.round(x)},${Math.round(y)},${Math.round(z)}`;
+    }
+
+    function addBlock(x, y, z, type) {
+        const key = getBlockKey(x, y, z);
+        if (blocksMap.has(key)) return; // Already a block here
+
+        const material = blockMaterials[type];
+        const mesh = new THREE.Mesh(blockGeometry, material);
+        mesh.position.set(Math.round(x), Math.round(y), Math.round(z));
+        
+        // Save block type for logic if needed
+        mesh.userData.blockType = type;
+
+        scene.add(mesh);
+        objects.push(mesh);
+        blocksMap.set(key, mesh);
+    }
+
+    function removeBlock(mesh) {
+        if (mesh.userData.blockType === 99) return; // Can't break bedrock
+        
+        const key = getBlockKey(mesh.position.x, mesh.position.y, mesh.position.z);
+        blocksMap.delete(key);
+        scene.remove(mesh);
+        objects.splice(objects.indexOf(mesh), 1);
+    }
+
+    function onDocumentMouseDown(event) {
+        if (!controls.isLocked) return;
+
+        raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+        // Only intersect up to 6 blocks away (Minecraft reach range)
+        const intersects = raycaster.intersectObjects(objects, false);
+
+        if (intersects.length > 0) {
+            const intersect = intersects[0];
+            if (intersect.distance > 6) return; // Too far
+
+            if (event.button === 0) { // Left Click (Break)
+                removeBlock(intersect.object);
+            } else if (event.button === 2) { // Right Click (Place)
+                // Calculate position attached to the face normal
+                const placePos = intersect.object.position.clone().add(intersect.face.normal);
+                
+                // Prevent placing block inside the player's body
+                const px = Math.floor(camera.position.x);
+                const py = Math.floor(camera.position.y);
+                const pz = Math.floor(camera.position.z);
+                const feetY = py - 1;
+                
+                if (Math.round(placePos.x) === px && Math.round(placePos.z) === pz && 
+                   (Math.round(placePos.y) === py || Math.round(placePos.y) === feetY)) {
+                    return; // Intersects player
+                }
+
+                addBlock(placePos.x, placePos.y, placePos.z, currentBlockType);
+            }
+        }
+    }
+
+    // --- HUD Updates ---
+    function selectBlock(type) {
+        currentBlockType = type;
+        // Update UI
+        document.querySelectorAll('.slot').forEach(el => el.classList.remove('active'));
+        document.getElementById(`slot-${type}`).classList.add('active');
+    }
+
+    // --- World Generation ---
+    function generateTerrain() {
+        const size = 20; // Radius of world
+        
+        for (let x = -size; x <= size; x++) {
+            for (let z = -size; z <= size; z++) {
+                // Generate Bedrock floor
+                addBlock(x, -5, z, 99); 
+                
+                // Simple sine-wave terrain generation
+                let height = Math.floor(Math.sin(x / 6) * 3 + Math.cos(z / 5) * 3);
+                
+                // Create underground dirt and top grass
+                for (let y = -4; y <= height; y++) {
+                    if (y === height) {
+                        addBlock(x, y, z, 2); // Grass top
+                    } else if (y > height - 3) {
+                        addBlock(x, y, z, 1); // Dirt layer
+                    } else {
+                        addBlock(x, y, z, 3); // Stone deep down
+                    }
+                }
+
+                // Randomly spawn trees
+                if (Math.random() < 0.02 && height > 0) {
+                    spawnTree(x, height + 1, z);
+                }
+            }
+        }
+    }
+
+    function spawnTree(x, baseY, z) {
+        // Tree trunk
+        for (let y = 0; y < 4; y++) {
+            addBlock(x, baseY + y, z, 4); // Wood
+        }
+        // Tree leaves
+        for (let lx = -2; lx <= 2; lx++) {
+            for (let lz = -2; lz <= 2; lz++) {
+                for (let ly = 3; ly <= 5; ly++) {
+                    // Make corners empty for rounded shape
+                    if (Math.abs(lx) === 2 && Math.abs(lz) === 2 && ly === 5) continue;
+                    addBlock(x + lx, baseY + ly, z + lz, 5); // Leaves
+                }
+            }
+        }
+    }
+
+    function onWindowResize() {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    // --- Collision & Physics ---
+    
+    function isSolid(x, y, z) {
+        return blocksMap.has(getBlockKey(x, y, z));
+    }
+
+    function animate() {
+        requestAnimationFrame(animate);
+
+        const time = performance.now();
+        const delta = (time - prevTime) / 1000;
+
+        if (controls.isLocked === true) {
+
+            // --- Raycast Block Highlighter ---
+            raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+            const intersects = raycaster.intersectObjects(objects, false);
+            if (intersects.length > 0 && intersects[0].distance <= 6) {
+                rollOverMesh.position.copy(intersects[0].object.position);
+                rollOverMesh.visible = true;
+            } else {
+                rollOverMesh.visible = false;
+            }
+
+            // --- Movement Physics ---
+            velocity.x -= velocity.x * 10.0 * delta; // Friction
+            velocity.z -= velocity.z * 10.0 * delta; // Friction
+            velocity.y -= 30.0 * delta; // Gravity (stronger for snappy feeling)
+
+            direction.z = Number(moveForward) - Number(moveBackward);
+            direction.x = Number(moveRight) - Number(moveLeft);
+            direction.normalize();
+
+            // Acceleration (FIXED: Added speed instead of subtracting to fix inverted keys)
+            const speed = 50.0;
+            if (moveForward || moveBackward) velocity.z += direction.z * speed * delta;
+            if (moveLeft || moveRight) velocity.x += direction.x * speed * delta;
+
+            // Get true world movement vectors based on camera rotation
+            const rightVector = new THREE.Vector3();
+            rightVector.setFromMatrixColumn(camera.matrix, 0);
+            rightVector.y = 0;
+            rightVector.normalize();
+
+            const forwardVector = new THREE.Vector3();
+            forwardVector.crossVectors(camera.up, rightVector);
+            forwardVector.normalize();
+
+            const moveDelta = new THREE.Vector3();
+            moveDelta.addScaledVector(rightVector, velocity.x * delta);
+            moveDelta.addScaledVector(forwardVector, velocity.z * delta);
+
+            // --- Advanced AABB Collision Detection ---
+            const px = camera.position.x;
+            const py = camera.position.y;
+            const pz = camera.position.z;
+
+            const nextX = px + moveDelta.x;
+            const nextY = py + velocity.y * delta;
+            const nextZ = pz + moveDelta.z;
+
+            // Y-Axis Collision (Floor and Ceiling)
+            if (velocity.y < 0 && isSolid(Math.round(px), Math.floor(nextY - 1.5), Math.round(pz))) {
+                velocity.y = Math.max(0, velocity.y); // Stop falling
+                camera.position.y = Math.floor(nextY - 1.5) + 1.5 + 0.5; // Snap to ground
+                canJump = true;
+            } else if (velocity.y > 0 && isSolid(Math.round(px), Math.floor(nextY + 0.5), Math.round(pz))) {
+                velocity.y = 0; // Hit head on ceiling
+            } else {
+                camera.position.y += velocity.y * delta; // Free fall/jump
+            }
+
+            // X-Axis Collision (Walls)
+            // FIXED: Check upper & lower body (y - 0.5 and y + 0.5) instead of the floor block (y - 1.5)
+            const checkLowerY = Math.floor(camera.position.y - 0.5);
+            const checkUpperY = Math.floor(camera.position.y + 0.5);
+
+            if (moveDelta.x !== 0) {
+                if (isSolid(Math.round(nextX), checkLowerY, Math.round(pz)) || 
+                    isSolid(Math.round(nextX), checkUpperY, Math.round(pz))) {
+                    velocity.x = 0; // Hit wall X
+                } else {
+                    camera.position.x += moveDelta.x;
+                }
+            }
+
+            // Z-Axis Collision (Walls)
+            const currentX = camera.position.x; // Use updated X for diagonal sliding against walls
+            if (moveDelta.z !== 0) {
+                if (isSolid(Math.round(currentX), checkLowerY, Math.round(nextZ)) || 
+                    isSolid(Math.round(currentX), checkUpperY, Math.round(nextZ))) {
+                    velocity.z = 0; // Hit wall Z
+                } else {
+                    camera.position.z += moveDelta.z;
+                }
+            }
+            
+            // World boundaries (prevent falling into the void forever)
+            if (camera.position.y < -10) {
+                camera.position.set(0, 10, 0); // Respawn
+                velocity.y = 0;
+            }
+        }
+
+        prevTime = time;
+        renderer.render(scene, camera);
+    }
+</script>
+</body>
+</html>
